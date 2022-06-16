@@ -1,0 +1,54 @@
+VEXT_TARGET_PROJECT := k6895v1_64
+VEXT_BASE_PROJECT := k6895v1_64
+#ifdef OPLUS_FEATURE_SECURITY_COMMON
+#Meilin.Zhou@BSP.Security.Basic, 2021/11/22, add for images sign arguments
+MTK_BASE_PROJECT := k6895v1_64
+#endif /* OPLUS_FEATURE_SECURITY_COMMON */
+ifndef VEXT_TARGET_PROJECT_FOLDER
+VEXT_TARGET_PROJECT_FOLDER := $(LOCAL_PATH)
+endif
+VEXT_PROJECT_FOLDER := $(VEXT_TARGET_PROJECT_FOLDER)
+
+VEXT_PROJECT_CONFIG_MK := $(VEXT_TARGET_PROJECT_FOLDER)/ProjectConfig.mk
+include $(VEXT_PROJECT_CONFIG_MK)
+include $(wildcard $(VEXT_TARGET_PROJECT_FOLDER)/RuntimeSwitchConfig.mk)
+$(call inherit-product, $(VEXT_TARGET_PROJECT_FOLDER)/device.mk)
+ifndef HAL_TARGET_PROJECT
+$(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
+endif
+ifneq ($(wildcard $(VEXT_TARGET_PROJECT_FOLDER)/vnd_$(VEXT_TARGET_PROJECT).mk),)
+mgk_name := $(strip $(shell cat $(VEXT_TARGET_PROJECT_FOLDER)/vnd_$(VEXT_TARGET_PROJECT).mk | grep 'KRN_TARGET_PROJECT\s*:=' | sed -e 's/KRN_TARGET_PROJECT\s*:=\s*//'))
+PRODUCT_PROPERTY_OVERRIDES += ro.vendor.mgk_name=$(mgk_name)
+# FIXME
+ifndef KRN_TARGET_PROJECT
+KERNEL_DEFCONFIG ?= $(mgk_name)_defconfig
+endif
+endif
+
+ifndef SYS_TARGET_PROJECT
+PRODUCT_BUILD_SYSTEM_IMAGE := false
+PRODUCT_BUILD_PRODUCT_IMAGE := false
+#ifdef OPLUS_FEATURE_BUILD
+#OuZijian@ANDROID.BUILD, 2021/08/06, Add for enabling independent system_ext for diting
+# Since BOARD_SYSTEM_EXTIMAGE_FILE_SYSTEM_TYPE and TARGET_COPY_OUT_SYSTEM_EXT have been set,
+# following MTK's convention, building system_ext needs to be disabled explicitly.
+PRODUCT_BUILD_SYSTEM_EXT_IMAGE := false
+#endif
+endif
+PRODUCT_BUILD_VENDOR_IMAGE :=
+
+PRODUCT_MANUFACTURER := alps
+PRODUCT_NAME := vext_k6895v1_64
+PRODUCT_DEVICE := k6895v1_64
+PRODUCT_MODEL := k6895v1_64
+PRODUCT_POLICY := android.policy_phone
+PRODUCT_BRAND := alps
+
+ifndef KRN_TARGET_PROJECT
+KERNEL_DEFCONFIG ?= gki_defconfig
+endif
+PRELOADER_TARGET_PRODUCT ?= k6895v1_64
+LK_PROJECT ?= k6895v1_64
+TINYSYS_TARGET_PROJECT := k6895v1_64
+TINYSYS_TARGET_PROJECT_FOLDER := $(VEXT_TARGET_PROJECT_FOLDER)
+TRUSTZONE_TARGET_PROJECT := k6895v1_64
