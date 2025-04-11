@@ -3340,7 +3340,11 @@ static int ilitek_get_vendor(void *chip_data, struct panel_info *panel_data)
 	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
 	chip_info->tp_type = panel_data->tp_type;
 	/*get ftm firmware ini from touch.h*/
-	chip_info->p_firmware_headfile = chip_info->ts->firmware_in_dts;
+	if (chip_info->ts->firmware_in_dts != NULL) {
+		chip_info->p_firmware_headfile = chip_info->ts->firmware_in_dts;
+	} else {
+		chip_info->p_firmware_headfile_h = &panel_data->firmware_headfile;
+	}
 	ILI_INFO("chip_info->tp_type = %d, "
 		 "panel_data->test_limit_name = %s, panel_data->fw_name = %s\n",
 		 chip_info->tp_type,
@@ -4432,7 +4436,11 @@ int ilitek7807s_spi_probe(struct spi_device *spi)
 	ts->chip_data = ilits;
 	ilits->hw_res = &ts->hw_res;
 	/*get ftm firmware ini from touch.h*/
-	ilits->p_firmware_headfile = ts->firmware_in_dts;
+	if (ts->firmware_in_dts) {
+		ilits->p_firmware_headfile = ts->firmware_in_dts;
+	} else {
+		ilits->p_firmware_headfile_h = &ts->panel_data.firmware_headfile;
+	}
 	/*idev->tp_type = TP_AUO;*/
 	ts->ts_ops = &ilitek_ops;
 	ts->engineer_ops = &ilitek_7807_engineer_test_ops;
@@ -4471,8 +4479,14 @@ int ilitek7807s_spi_probe(struct spi_device *spi)
 	}
 	ILI_INFO("position_high_resolution = %d\n", ilits->position_high_resolution);
 
-	if (!ERR_ALLOC_MEM(ilits->p_firmware_headfile)) {
-		ILI_INFO("ILI firmware_size = 0x%X\n", (u32)ilits->p_firmware_headfile->size);
+	if (ts->firmware_in_dts) {
+		if (!ERR_ALLOC_MEM(ilits->p_firmware_headfile)) {
+			ILI_INFO("ILI firmware_size = 0x%X\n", (u32)ilits->p_firmware_headfile->size);
+		}
+	} else {
+		if (!ERR_ALLOC_MEM(ilits->p_firmware_headfile_h)) {
+			ILI_INFO("ILI firmware_h_size = 0x%X\n", (u32)ilits->p_firmware_headfile_h->firmware_size);
+		}
 	}
 
 	/*ili_irq_disable();*/

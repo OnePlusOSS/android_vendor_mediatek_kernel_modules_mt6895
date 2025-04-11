@@ -3401,14 +3401,16 @@ static void cts_tcs_get_data_for_oplus(struct seq_file *s, void *chip_data, bool
         data_valid = false;
     }
 
-    if (data_valid) {
-        for (r = 0; r < cts_dev->fwdata.rows; r++) {
-            for (c = 0; c < cts_dev->fwdata.cols; c++) {
-                seq_printf(s, "%5d", rawdata[r * cts_dev->fwdata.cols + c]);
-            }
-           seq_printf(s, "\n");
-        }
-    }
+	if (data_valid) {
+		seq_printf(s, "diff_data:\n");
+		for (r = 0; r < cts_dev->fwdata.rows; r++) {
+			seq_printf(s, "[%2d]", r);
+			for (c = 0; c < cts_dev->fwdata.cols; c++) {
+				seq_printf(s, "%5d", rawdata[r * cts_dev->fwdata.cols + c]);
+			}
+			seq_printf(s, "\n");
+		}
+	}
 
     kfree(rawdata);
 }

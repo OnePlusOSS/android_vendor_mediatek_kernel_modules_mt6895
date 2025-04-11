@@ -675,6 +675,7 @@ struct ilitek_ts_data {
 	unsigned long irq_timer;
 	bool ignore_first_irq;
 	struct firmware *p_firmware_headfile;   /*for ili firmware*/
+	struct firmware_headfile *p_firmware_headfile_h;   /*for ili .h firmware*/
 	tp_dev tp_type;
 	char *fw_name;
 	char *test_limit_name;

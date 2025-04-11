@@ -509,14 +509,15 @@ struct cts_device {
 struct chipone_ts_data {
     struct touchpanel_data *tsdata;
     struct cts_firmware vfw;
-
+	struct firmware *p_firmware_headfile;
+	struct firmware_headfile *p_firmware_headfile_h;
     int touch_direction;
 #ifdef CONFIG_CTS_I2C_HOST
     struct i2c_client *i2c_client;
 #else
     struct spi_device *spi_client;
 #endif /* CONFIG_CTS_I2C_HOST */
-
+	bool boot_update;
     struct device *device;
 
     struct cts_device cts_dev;
