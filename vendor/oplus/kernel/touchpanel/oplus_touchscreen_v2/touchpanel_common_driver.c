@@ -2276,6 +2276,7 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	ts->pen_support_opp = of_property_read_bool(np, "pen_support_opp");
 	ts->bus_ready_check_support = of_property_read_bool(np, "bus_ready_check_support");
 	TP_INFO(ts->tp_index, "bus_ready_check_support is %d\n", ts->bus_ready_check_support);
+	ts->aiunit_game_info_support = of_property_read_bool(np, "aiunit_game_info_support");
 
 	ts->tp_lcd_suspend_in_lp_support = of_property_read_bool(np, "tp_lcd_suspend_in_lp_support");
 	TP_INFO(ts->tp_index, "tp_lcd_suspend_in_lp_support is %d\n", ts->tp_lcd_suspend_in_lp_support);
@@ -2922,6 +2923,12 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	}
 	else {
 		TPD_BOOT_INFO("touch_environment:%s\n", ts->touch_environment);
+	}
+
+	rc = of_property_read_u32(np, "touchpanel,aiunit_game_valid_bits", &ts->aiunit_game_valid_bits);
+	if (rc) {
+		TP_BOOT_INFO(ts->tp_index, "tp aiunit game valid bits not specified\n");
+		ts->aiunit_game_valid_bits = 19;
 	}
 
 	init_panel_config(dev, ts);
@@ -4165,6 +4172,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 	ts->gesture_enable = 0;
 	ts->fd_enable = 0;
 	ts->fp_enable = 0;
+	ts->aiunit_game_enable = 0;
 	ts->fp_info.touch_state = 0;
 	ts->palm_enable = 1;
 	ts->touch_count = 0;
