@@ -1086,12 +1086,27 @@ void unset_inherit_ux(struct task_struct *task, int type)
 }
 EXPORT_SYMBOL_GPL(unset_inherit_ux);
 
-bool im_mali(char *comm)
+#ifndef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
+bool im_mali(const char *comm)
 {
-	return !strcmp(comm, "mali-event-hand") || !strcmp(comm, "mali-cmar-backe") ||
-		!strcmp(comm, "mali-mem-purge") || !strcmp(comm, "mali-cpu-comman") ||
-		!strcmp(comm, "mali-compiler");
+	if (comm == NULL) {
+		return false;
+	}
+
+	if (!strncmp(comm, "mali-", 5)) {
+		const char *postfix = comm + 5;
+		return !strcmp(postfix, "event-hand") || !strcmp(postfix, "cmar-backe") ||
+			!strcmp(postfix, "mem-purge") || !strcmp(postfix, "cpu-comman") ||
+			!strcmp(postfix, "compiler");
+	}
+	return false;
 }
+#else
+inline bool im_mali(const char *comm) {
+	return false;
+}
+#endif
+
 
 bool cgroup_check_set_sched_assist_boost(char *comm)
 {

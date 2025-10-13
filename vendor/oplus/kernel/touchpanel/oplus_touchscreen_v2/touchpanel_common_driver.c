@@ -2139,6 +2139,28 @@ static void init_panel_config(struct device *dev, struct touchpanel_data *ts)
 	}
 }
 
+static void tp_healthinfo_init_dts_child_node(struct device *dev, struct touchpanel_data *ts)
+{
+	struct device_node *chip_np;
+	int temp_array[2] = {0};
+	int rc = 0;
+	chip_np = is_support_child_node(dev, ts);
+	if (!chip_np) {
+		return;
+	}
+
+	rc = of_property_read_u32_array(chip_np, "touchpanel,panel-coords", temp_array, 2);
+
+	if (rc) {
+		ts->monitor_data.max_x = 0;
+		ts->monitor_data.max_y = 0;
+
+	} else {
+		ts->monitor_data.max_x = temp_array[0];
+		ts->monitor_data.max_y = temp_array[1];
+	}
+}
+
 /**
  * init_parse_dts - parse dts, get resource defined in Dts
  * @dev: i2c_client->dev using to get device tree
@@ -3774,6 +3796,12 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 
 		if (ret < 0) {
 			TP_INFO(ts->tp_index, "health info init failed.\n");
+		}
+
+		chip_np = is_support_child_node(ts->dev, ts);
+
+		if (chip_np) {
+			tp_healthinfo_init_dts_child_node(ts->dev, ts);
 		}
 
 		ts->monitor_data.health_monitor_support = true;

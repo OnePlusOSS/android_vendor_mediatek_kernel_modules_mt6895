@@ -112,7 +112,7 @@ static int fts_hw_reset(struct chip_data_ft3518 *ts_data, u32 delayms)
 	if (delayms) {
 		msleep(delayms);
 	}
-
+	ts_data->is_ic_sleep = false;
 	return 0;
 }
 static int fts_power_control(void *chip_data, bool enable)
@@ -137,7 +137,7 @@ static int fts_power_control(void *chip_data, bool enable)
 		msleep(POWEWRUP_TO_RESET_TIME);
 		fts_rstgpio_set(ts_data->hw_res, true);
 		msleep(RESET_TO_NORMAL_TIME);
-
+		ts_data->is_ic_sleep = false;
 	} else {
 		fts_rstgpio_set(ts_data->hw_res, false);
 		msleep(1);
@@ -1408,7 +1408,6 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 		fts_power_control(chip_data, true);
 	}
 
-	ts_data->is_ic_sleep = false;
 	switch (mode) {
 	case MODE_NORMAL:
 		TPD_INFO("MODE_NORMAL");
@@ -1430,7 +1429,7 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 			 ts_data->ts->is_suspended);
 
 		if (ts_data->ts->is_suspended) {                             /* do not pull up reset when doing resume*/
-			if (ts_data->last_mode == MODE_SLEEP) {
+			if (ts_data->is_ic_sleep == true) {
 				fts_hw_reset(ts_data, RESET_TO_NORMAL_TIME);
 			}
 		}
@@ -1502,7 +1501,6 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 		goto mode_err;
 	}
 
-	ts_data->last_mode = mode;
 	return 0;
 mode_err:
 	return ret;
@@ -2832,6 +2830,7 @@ static int fts_tp_probe(struct i2c_client *client,
 	ts_data->monitor_data = &ts->monitor_data;
 	ts_data->snr_read_support = ts->snr_read_support;
 	ts_data->chip_resolution_info = &ts->resolution_info;
+	ts_data->is_ic_sleep = false;
 	/*step6:create synaptics related proc files*/
 	fts_create_proc(ts, ts_data->syna_ops);
 
