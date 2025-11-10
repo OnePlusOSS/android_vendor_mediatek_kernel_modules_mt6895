@@ -88,6 +88,7 @@ struct oplus_cpa {
 	unsigned int vooc_sid;
 	bool ufcs_online;
 	bool retention_state;
+	bool pre_retention_state;
 	bool retention_state_ready;
 
 	bool wired_present;
@@ -739,8 +740,10 @@ static void oplus_cpa_wired_subs_callback(struct mms_subscribe *subs,
 				cpa->wired_online = false;
 				if (!cpa->retention_topic)
 					schedule_work(&cpa->wired_offline_work);
-				else if (cpa->retention_state_ready && !cpa->retention_state)
+				else if ((cpa->retention_state_ready || cpa->pre_retention_state)
+					&& !cpa->retention_state)
 					schedule_work(&cpa->wired_offline_work);
+				cpa->pre_retention_state = cpa->retention_state;
 			} else {
 				if (!cpa->retention_state)
 					cpa->retention_state_ready = false;
@@ -902,6 +905,8 @@ static void oplus_cpa_retention_subs_callback(struct mms_subscribe *subs,
 			if (!data.intval && cpa->retention_state != !!data.intval)
 				schedule_work(&cpa->wired_offline_work);
 			cpa->retention_state = !!data.intval;
+			if (cpa->retention_state)
+				cpa->pre_retention_state = cpa->retention_state;
 			break;
 		case RETENTION_ITEM_STATE_READY:
 			cpa->retention_state_ready = true;

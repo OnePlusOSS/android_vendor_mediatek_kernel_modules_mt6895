@@ -236,6 +236,7 @@ enum dynamic_config_id {
 	DC_GLOVE_MODE_STATE = 0xF5,
 	DC_GESTURE_MASK   = 0xFE,
 	DC_LOW_TEMP_ENABLE = 0xFD,
+	DC_WATERPROOF_ENABLE = 0xFC,
 };
 
 enum command {
