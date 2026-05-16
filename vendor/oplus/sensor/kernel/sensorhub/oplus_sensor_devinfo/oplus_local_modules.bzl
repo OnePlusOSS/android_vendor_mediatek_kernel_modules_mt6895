@@ -15,7 +15,8 @@ def define_oplus_local_modules():
         ],
         local_defines = ["CONFIG_OPLUS_SENSOR_MTK68XX"],
         conditional_defines = {
-            "mtk":  ["CONFIG_OPLUS_SENSOR_USE_BLANK_MODE"],
+            "mtk":  ["CONFIG_OPLUS_SENSOR_USE_BLANK_MODE",
+                     "CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO"],
         },
     )
 

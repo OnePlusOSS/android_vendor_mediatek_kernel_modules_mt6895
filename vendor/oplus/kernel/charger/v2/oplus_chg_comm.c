@@ -100,6 +100,10 @@ static int oplus_dbg_timeout = 0;
 module_param(oplus_dbg_timeout, int, 0644);
 MODULE_PARM_DESC(oplus_dbg_timeout, "oplus debug chg timeout");
 
+static int oplus_gauge_r_data = 0;
+module_param(oplus_gauge_r_data, int, 0644);
+MODULE_PARM_DESC(oplus_gauge_r_data, "oplus gauge r data flag");
+
 struct oplus_comm_spec_config {
 	int32_t temp_region_max;
 	int32_t ffc_temp_region_max;
@@ -190,6 +194,7 @@ struct oplus_comm_config {
 	int32_t chg_shutdown_max_mv;
 	uint8_t hidden_soc_switch;
 	uint32_t hidden_soc_percent;
+	bool support_gauge_r_track;
 } __attribute__ ((packed));
 
 struct ui_soc_decimal {
@@ -430,6 +435,7 @@ struct oplus_chg_comm {
 
 	unsigned int nvid_support_flags;
 	int plc_status;
+	struct delayed_work gauge_r_info_work;
 };
 
 typedef struct {
@@ -1752,6 +1758,78 @@ void oplus_comm_get_rechg_soc_limit(struct oplus_mms *topic, int *rechg_soc, boo
 	*en = chip->rechg_soc_en;
 }
 
+static int oplus_chg_track_upload_gauge_r_info(struct oplus_chg_comm *chip)
+{
+#define TRACK_UPLOAD_COUNT_MAX 3
+#define TRACK_LOCAL_T_NS_TO_S_THD 1000000000
+#define TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD (24 * 3600)
+#define TRACK_GAUGE_R_MSG_LENTH 512
+
+	struct oplus_mms *err_topic;
+	struct mms_msg *msg;
+	union mms_msg_data data = { 0 };
+	static int upload_count = 0, pre_upload_time = 0, curr_time;
+	char msg_info[TRACK_GAUGE_R_MSG_LENTH] = { 0 };
+	int bat_soh = 0;
+	int rc, index = 0;
+
+
+	curr_time = local_clock() / TRACK_LOCAL_T_NS_TO_S_THD;
+	if (curr_time - pre_upload_time > TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD)
+		upload_count = 0;
+
+	if (upload_count >= TRACK_UPLOAD_COUNT_MAX)
+		return -ENODEV;
+
+	pre_upload_time = local_clock() / TRACK_LOCAL_T_NS_TO_S_THD;
+
+	err_topic = oplus_mms_get_by_name("error");
+	if (!err_topic) {
+		chg_err("error topic not found\n");
+		return -ENODEV;
+	}
+
+	bat_soh = oplus_gauge_get_batt_soh();
+	rc = oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_GAUGE_R_INFO, &data, true);
+	if (rc == 0 && data.strval && strlen(data.strval)) {
+		chg_err("[gauge_r_reg_info] %s", data.strval);
+		index += scnprintf(&(msg_info[index]),
+			TRACK_GAUGE_R_MSG_LENTH - index, "$$gauge_r_info@@%s", data.strval);
+	}
+
+	oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_FCC, &data, false);
+	chip->batt_fcc = data.intval;
+	index += scnprintf(&(msg_info[index]),
+			TRACK_GAUGE_R_MSG_LENTH - index, "$$soc@@%d$$smooth_soc@@%d$$uisoc@@%d$$vbatt_max@@%d$$vbatt_min@@%d"
+			"$$ibat_ma@@%d$$batt_temp@@%d$$batt_cc@@%d$$batt_fcc@@%d$$bat_soh@@%d",
+			chip->soc, chip->smooth_soc, chip->ui_soc, chip->vbat_mv, chip->vbat_min_mv,
+			chip->ibat_ma, chip->batt_temp, chip->batt_cc, chip->batt_fcc, bat_soh);
+
+	msg = oplus_mms_alloc_str_msg(
+		MSG_TYPE_ITEM, MSG_PRIO_MEDIUM, ERR_ITEM_GAUGE_R_INFO, msg_info);
+	if (msg == NULL) {
+		chg_err("alloc GAUGE_ITEM_GAUGE_R_INFO error msg error\n");
+		return -ENOMEM;
+	}
+
+	rc = oplus_mms_publish_msg_sync(err_topic, msg);
+	if (rc < 0) {
+		chg_err("publish gauge r para error msg error, rc=%d\n", rc);
+		kfree(msg);
+	}
+	upload_count++;
+
+	return rc;
+}
+
+static void oplus_chg_track_gauge_r_info_trigger_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_chg_comm *chip = container_of(dwork, struct oplus_chg_comm, gauge_r_info_work);
+
+	oplus_chg_track_upload_gauge_r_info(chip);
+}
+
 static void oplus_comm_check_rechg(struct oplus_chg_comm *chip)
 {
 	struct oplus_comm_spec_config *spec = &chip->spec;
@@ -2702,6 +2780,22 @@ static unsigned long oplus_comm_ui_soc_low_battery_control(struct oplus_chg_comm
 	return soc_down_jiffies;
 }
 
+static void oplus_comm_gauge_r_info_check(struct oplus_chg_comm *chip)
+{
+	struct oplus_comm_spec_config *spec = &chip->spec;
+	int vbat_uv_thr_mv = spec->vbat_uv_thr_mv + GAUGE_VBAT_UV_DELATA;
+	static int pre_soc = 0;
+
+	if (!chip->config.support_gauge_r_track)
+		return;
+
+	if (oplus_gauge_r_data > 0 || (pre_soc > 0 && chip->ui_soc >= 2 && chip->soc == 0 && chip->vbat_min_mv > vbat_uv_thr_mv))
+		schedule_delayed_work(&chip->gauge_r_info_work, 0);
+
+	oplus_gauge_r_data = 0;
+	pre_soc = chip->soc;
+}
+
 #define CHG_UP_LIMIT_FAIL_THRESHOLD	3
 #define CHG_UP_LIMIT_REAL_SOC_THRESHOLD	99
 static bool get_chg_up_not_limit_state(int ui_soc, int smooth_soc)
@@ -2773,6 +2867,7 @@ static void oplus_comm_ui_soc_update(struct oplus_chg_comm *chip)
 
 	if (chip->config.support_uisoc_low_battery_control)
 		soc_down_jiffies = oplus_comm_ui_soc_low_battery_control(chip, soc_down_jiffies, &force_down_1);
+	oplus_comm_gauge_r_info_check(chip);
 
 	if (chip->deep_support && config->chg_shutdown_max_mv != -EINVAL)
 		charging_uv_thr_mv = min(charging_uv_thr_mv, config->chg_shutdown_max_mv);
@@ -7698,6 +7793,7 @@ static int oplus_comm_parse_dt(struct oplus_chg_comm *comm_dev)
 	if (rc < 0)
 		config->chg_shutdown_max_mv = -EINVAL;
 
+	config->support_gauge_r_track = of_property_read_bool(node, "oplus_spec,support_gauge_r_track");
 	oplus_comm_parse_dec_vol_dt(comm_dev);
 
 	oplus_comm_parse_smooth_soc_dt(comm_dev);
@@ -8375,13 +8471,14 @@ static ssize_t oplus_comm_chg_cycle_write(struct file *file,
 	struct oplus_chg_comm *chip = pde_data(file_inode(file));
 	char proc_chg_cycle_data[16];
 
-	if(count >= 16) {
-		count = 16;
-	}
+	if(count >= sizeof(proc_chg_cycle_data))
+		count = sizeof(proc_chg_cycle_data) - 1;
+
 	if (copy_from_user(&proc_chg_cycle_data, buff, count)) {
 		chg_err("chg_cycle_write error.\n");
 		return -EFAULT;
 	}
+	proc_chg_cycle_data[count] = '\0';
 
 	if ((strncmp(proc_chg_cycle_data, "en808", 5) == 0) ||
 	    (strncmp(proc_chg_cycle_data, "user_enable", 11) == 0)) {
@@ -9071,6 +9168,7 @@ static int oplus_comm_driver_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&comm_dev->ui_soc_decimal_work, oplus_comm_show_ui_soc_decimal);
 	INIT_DELAYED_WORK(&comm_dev->lcd_notify_reg_work, oplus_comm_lcd_notify_reg_work);
 	INIT_DELAYED_WORK(&comm_dev->fg_soft_reset_work, oplus_fg_soft_reset_work);
+	INIT_DELAYED_WORK(&comm_dev->gauge_r_info_work, oplus_chg_track_gauge_r_info_trigger_work);
 
 	spin_lock_init(&comm_dev->remuse_lock);
 	mutex_init(&comm_dev->decimal_lock);

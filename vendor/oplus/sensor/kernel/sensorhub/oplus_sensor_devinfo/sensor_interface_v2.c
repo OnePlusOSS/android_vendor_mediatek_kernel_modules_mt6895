@@ -68,6 +68,19 @@ static int send_lcdinfo_to_hub(struct als_info *lcd_info)
 	return oplus_send_comm_to_hub(lcd_info->senstype, OPLUS_ACTION_SET_LCD_INFO, lcd_info, sizeof(struct als_info));
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+static int send_sf_info_to_hub(struct screen_sf_info *sf_info)
+{
+	DEVINFO_LOG("type:%u, start_ts:%lld, end_ts:%lld, index:%d\n",
+		sf_info->senstype,
+		sf_info->start_ts,
+		sf_info->end_ts,
+		sf_info->index);
+
+	return oplus_send_comm_to_hub(sf_info->senstype, OPLUS_ACTION_SET_SF_INFO, sf_info, sizeof(struct screen_sf_info));
+}
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
+
 static void init_sensorlist(void)
 {
    int ret = 0;
@@ -148,6 +161,9 @@ struct sensorhub_interface sensorhub_v2 = {
     .send_cfg = NULL,
     .send_utc_time = send_utc_time_to_hub,
     .send_lcdinfo = send_lcdinfo_to_hub,
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+    .send_sf_info = send_sf_info_to_hub,
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
     .init_sensorlist = init_sensorlist,
     .is_sensor_available = is_sensor_available,
     .is_sensor_type_available = is_sensor_type_available,

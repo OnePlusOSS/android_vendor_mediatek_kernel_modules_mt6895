@@ -28,6 +28,10 @@
 #endif
 
 #define FIFO_SIZE 32
+#define MAX_CMDLINE_PARAM_LEN 512
+#define WUKONG_SEC_PANEL_NAME "mdss_dsi_panel_AA545_P_3_A0005_dsc_cmd"
+char ssc_dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
+EXPORT_SYMBOL(ssc_dsi_display_primary);
 
 /*static DECLARE_KFIFO_PTR(test, struct fifo_frame);*/
 
@@ -197,17 +201,18 @@ static void ssc_interactive_set_brightness(enum panel_event_notifier_tag panel_t
 				 */
 				break;
 			}
-
-			if ((0 == cnt) && (brigtness <= ssc_cxt->brl_info.pri_brl_thrd[cnt])) {
-				/* brl: 0 ~ pri_brl_thrd[cnt] */
-				brigtness = ssc_cxt->brl_info.pri_brl_thrd[cnt] - 1;
-			} else if (cnt == (ssc_cxt->brl_info.pri_brl_num - 1) && (brigtness > ssc_cxt->brl_info.pri_brl_thrd[cnt])) {
-				/* brl: pri_brl_thrd[max] ~ 2047 */
-				brigtness = ssc_cxt->brl_info.pri_brl_thrd[cnt] + 1;
-			} else if ((brigtness <= ssc_cxt->brl_info.pri_brl_thrd[cnt]) &&
-				(brigtness > ssc_cxt->brl_info.pri_brl_thrd[cnt - 1])) {
-				/* brl: pri_brl_thrd[cnt-1] ~ pri_brl_thrd[cnt] */
-				brigtness = ssc_cxt->brl_info.pri_brl_thrd[cnt] - 1;
+			if (!strstr(ssc_dsi_display_primary, WUKONG_SEC_PANEL_NAME)) {
+				if ((0 == cnt) && (brigtness <= ssc_cxt->brl_info.pri_brl_thrd[cnt])) {
+					/* brl: 0 ~ pri_brl_thrd[cnt] */
+					brigtness = ssc_cxt->brl_info.pri_brl_thrd[cnt] - 1;
+				} else if (cnt == (ssc_cxt->brl_info.pri_brl_num - 1) && (brigtness > ssc_cxt->brl_info.pri_brl_thrd[cnt])) {
+					/* brl: pri_brl_thrd[max] ~ 2047 */
+					brigtness = ssc_cxt->brl_info.pri_brl_thrd[cnt] + 1;
+				} else if ((brigtness <= ssc_cxt->brl_info.pri_brl_thrd[cnt]) &&
+					(brigtness > ssc_cxt->brl_info.pri_brl_thrd[cnt - 1])) {
+					/* brl: pri_brl_thrd[cnt-1] ~ pri_brl_thrd[cnt] */
+					brigtness = ssc_cxt->brl_info.pri_brl_thrd[cnt] - 1;
+				}
 			}
 		}
 	}
@@ -715,6 +720,7 @@ static void parse_br_level_info_dts(struct ssc_interactive *ssc_cxt,
 	uint32_t value = 0;
 	uint32_t brl_num = 0;
 
+	pr_info("[SSC] dsi_display_primary panel nema = %s \n", ssc_dsi_display_primary);
 	if (0 == strncmp(ch_node->name, "primary_lb_brl_info", 19)) {
 		rc = of_property_read_u32(ch_node, "brl_thrd_num", &value);
 		if (!rc) {
@@ -972,7 +978,12 @@ static void __exit ssc_interactive_exit(void)
 	g_ssc_cxt = NULL;
 }
 
+module_param_string(dsi_display0, ssc_dsi_display_primary, MAX_CMDLINE_PARAM_LEN, 0600);
+MODULE_PARM_DESC(dsi_display0,
+	"ssc_interact.dsi_display0=<display node> for primary dsi display node name");
+
 module_init(ssc_interactive_init);
 module_exit(ssc_interactive_exit);
+
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("JiangHua.Tang");

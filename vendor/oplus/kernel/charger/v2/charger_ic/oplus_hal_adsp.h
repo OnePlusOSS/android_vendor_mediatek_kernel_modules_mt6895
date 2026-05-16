@@ -162,6 +162,7 @@ enum oplus_ap_message_id {
 	AP_MESSAGE_GET_GAUGE_REG_INFO,
 	AP_MESSAGE_GET_GAUGE_CALIB_TIME,
 	AP_MESSAGE_GET_GAUGE_BATTINFO,
+	AP_MESSAGE_GET_GAUGE_R_INFO,
 	AP_MESSAGE_MAX_SIZE = 32,
 };
 
@@ -588,6 +589,7 @@ struct oplus_chg_iio {
 	struct iio_channel	*batt_con_btb_chan;
 	struct iio_channel	*usb_con_btb_chan;
 	struct iio_channel	*chg_mos_temp_chan;
+	struct iio_channel	*pmic_vbat_adc;
 };
 #endif
 

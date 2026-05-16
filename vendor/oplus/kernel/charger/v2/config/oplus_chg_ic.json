@@ -1053,6 +1053,7 @@
         "ic/switch.json",
         "ic/ufcs.json",
         "ic/pps.json",
-        "ic/batt_bal.json"
+        "ic/batt_bal.json",
+        "ic/gauge2.json"
     ]
 }

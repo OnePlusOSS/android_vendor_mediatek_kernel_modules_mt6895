@@ -2256,6 +2256,70 @@ static const struct proc_ops proc_force_current_limit_ops = {
 };
 #endif
 
+#define DEC_CV_CC_BUF_LEN 5
+static ssize_t proc_dec_cv_cc_debug_write(struct file *file, const char __user *user_buf, size_t len, loff_t *data)
+{
+	struct oplus_chg_chip *chip = PDE_DATA(file_inode(file));
+	char buf[DEC_CV_CC_BUF_LEN] = { 0 };
+	int dbg_cc = 0;
+
+	if (!chip->dec_cv.dec_spec_support)
+		return -EFAULT;
+
+	if (len < 1 || len > DEC_CV_CC_BUF_LEN) {
+		chg_err("len %lu invalid\n", len);
+		return -EFAULT;
+	}
+
+	if (copy_from_user(buf, user_buf, len))
+		return -EFAULT;
+
+	buf[DEC_CV_CC_BUF_LEN - 1] = '\0';
+
+	if (1 != sscanf(buf, "%d", &dbg_cc)) {
+		chg_err("invalid buf: '%s', len = %zd\n", buf, len);
+		return -EFAULT;
+	}
+	chip->dec_cv.full.dbg_soh = dbg_cc;
+
+	return len;
+}
+
+static ssize_t proc_dec_cv_cc_debug_read(struct file *file, char __user *user_buf, size_t count, loff_t *off)
+{
+	struct oplus_chg_chip *chip = PDE_DATA(file_inode(file));
+	char buf[256] = { 0 };
+	int len = 0;
+
+	len = sprintf(buf, "delta=%d, dbg_cc=%d, fv_dec=%d, vct=%d\n",
+		chip->dec_cv.dec_delta, chip->dec_cv.full.dbg_soh, chip->dec_cv.dec_vol, chip->dec_cv.full.vct_up);
+	if (len > *off)
+		len -= *off;
+	else
+		len = 0;
+	if (copy_to_user(user_buf, buf, (len < count ? len : count)))
+		return -EFAULT;
+
+	*off += len < count ? len : count;
+
+	return (len < count ? len : count);
+}
+
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+static const struct file_operations proc_dec_cv_cc_debug_ops = {
+	.write = proc_dec_cv_cc_debug_write,
+	.read = proc_dec_cv_cc_debug_read,
+	.owner = THIS_MODULE,
+};
+#else
+static const struct proc_ops proc_dec_cv_cc_debug_ops = {
+	.proc_write = proc_dec_cv_cc_debug_write,
+	.proc_read = proc_dec_cv_cc_debug_read,
+	.proc_lseek = noop_llseek,
+};
+#endif
+
 bool oplus_get_hmac(void)
 {
 	struct oplus_chg_chip *chip = g_charger_chip;
@@ -2937,6 +3001,12 @@ static int init_charger_proc(struct oplus_chg_chip *chip)
 	if (prEntry_tmp == NULL) {
 		ret = -1;
 		chg_debug("%s: Couldn't create proc_force_current_limit_ops entry, %d\n", __func__, __LINE__);
+	}
+
+	prEntry_tmp = proc_create_data("dec_cv_cc", 0664, prEntry_da, &proc_dec_cv_cc_debug_ops, chip);
+	if (prEntry_tmp == NULL) {
+		ret = -1;
+		chg_debug("%s: Couldn't create proc_dec_cv_cc_debug_ops entry, %d\n", __func__, __LINE__);
 	}
 
 	ret = misc_register(&oplus_chg_device);
@@ -8780,7 +8850,7 @@ static void oplus_chg_variables_init(struct oplus_chg_chip *chip)
 	chip->shell_temp = TEMPERATURE_INVALID;
 	chip->subboard_temp = TEMPERATURE_INVALID;
 	chip->tbatt_shell_status = false;
-	chip->soc = 0;
+	chip->soc = 50;
 	chip->ui_soc = 50;
 	chip->notify_code = 0;
 	chip->check_time_sec = 0;
@@ -12313,17 +12383,10 @@ static void oplus_chg_check_status_full(struct oplus_chg_chip *chip)
 
 		last_recharging_vol = recharging_vol;
 
-		if (chip->rechg_soc_en) {
-			if (chip->batt_volt < recharging_vol)
-				chip->full_data.clear_full_check_count++;
-			else
-				chip->full_data.clear_full_check_count = 0;
-		} else {
-			if (chip->batt_volt < (recharging_vol - CLEAR_FULL_VOLT_THD))
-				chip->full_data.clear_full_check_count++;
-			else
-				chip->full_data.clear_full_check_count = 0;
-		}
+		if (chip->batt_volt < (recharging_vol - CLEAR_FULL_VOLT_THD))
+			chip->full_data.clear_full_check_count++;
+		else
+			chip->full_data.clear_full_check_count = 0;
 
 		if (chip->full_data.clear_full_check_count > CLEAR_FULL_CNT) {
 			chg_err("soc %d %d %d vbat %d < %d clear full\n",
