@@ -167,7 +167,8 @@ ssize_t hybridswap_loglevel_show(struct device *dev,
 }
 
 /* Make sure the memcg is not NULL in caller */
-memcg_hybs_t *hybridswap_cache_alloc(struct mem_cgroup *memcg, bool atomic)
+memcg_hybs_t *hybridswap_cache_alloc(struct mem_cgroup *memcg, bool atomic,
+				     bool css_alloc)
 {
 	memcg_hybs_t *hybs;
 	u64 ret;
@@ -184,6 +185,8 @@ memcg_hybs_t *hybridswap_cache_alloc(struct mem_cgroup *memcg, bool atomic)
 		log_err("alloc memcg_hybs_t failed\n");
 		return NULL;
 	}
+
+	hybs->css_alloc = css_alloc;
 
 	INIT_LIST_HEAD(&hybs->score_node);
 #ifdef CONFIG_HYBRIDSWAP_CORE
@@ -213,7 +216,7 @@ static void mem_cgroup_alloc_hook(void *data, struct mem_cgroup *memcg)
 	if (memcg->android_oem_data1)
 		BUG();
 
-	hybridswap_cache_alloc(memcg, true);
+	hybridswap_cache_alloc(memcg, true, true);
 }
 
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_HEALTHINFO)
@@ -287,12 +290,21 @@ static void mem_cgroup_css_offline_hook(void *data,
 		struct cgroup_subsys_state *css, struct mem_cgroup *memcg)
 {
 	unsigned long flags;
+	memcg_hybs_t *hybs = MEMCGRP_ITEM_DATA(memcg);
 
-	if (memcg->android_oem_data1) {
+	if (hybs) {
 		spin_lock_irqsave(&score_list_lock, flags);
 		list_del_init(&MEMCGRP_ITEM(memcg, score_node));
 		spin_unlock_irqrestore(&score_list_lock, flags);
-		css_put(css);
+
+		/*
+		 * if hybs allocated after css_alloc(), then css refcount is
+		 * error without css_get(). Actually we can remove get/put in
+		 * hooks, however, for compatiable, just invokes css_put()
+		 * if alloc in css_alloc_hook().
+		 */
+		if (hybs->css_alloc)
+			css_put(css);
 	}
 }
 
@@ -951,7 +963,7 @@ static ssize_t mem_cgroup_name_write(struct kernfs_open_file *of, char *buf,
 	int len, w_len;
 
 	if (unlikely(hybp == NULL)) {
-		hybp = hybridswap_cache_alloc(memcg, false);
+		hybp = hybridswap_cache_alloc(memcg, false, false);
 		if (!hybp)
 			return -EINVAL;
 	}
@@ -992,7 +1004,7 @@ static int mem_cgroup_app_score_write(struct cgroup_subsys_state *css,
 	memcg = mem_cgroup_from_css(css);
 	hybs = MEMCGRP_ITEM_DATA(memcg);
 	if (!hybs) {
-		hybs = hybridswap_cache_alloc(memcg, false);
+		hybs = hybridswap_cache_alloc(memcg, false, false);
 		if (!hybs)
 			return -EINVAL;
 	}
@@ -1028,7 +1040,7 @@ int mem_cgroup_app_uid_write(struct cgroup_subsys_state *css,
 	hybs = MEMCGRP_ITEM_DATA(memcg);
 
 	if (unlikely(hybs == NULL)) {
-		hybs = hybridswap_cache_alloc(memcg, false);
+		hybs = hybridswap_cache_alloc(memcg, false, false);
 		if (!hybs)
 			return -EINVAL;
 	}

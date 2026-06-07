@@ -751,8 +751,7 @@ static inline int syna_tcm_realloc_mem(struct syna_tcm_hcd *tcm_hcd,
 		if (!(buffer->buf)) {
 			TPD_INFO("%s: Failed to allocate memory\n",
 				 __func__);
-			kfree(temp);
-			buffer->buf_size = 0;
+			buffer->buf = temp;
 			return -ENOMEM;
 		}
 

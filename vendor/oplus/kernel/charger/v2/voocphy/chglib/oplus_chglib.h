@@ -145,6 +145,7 @@ struct vphy_chip *oplus_chglib_register_vphy(struct device *dev,
 void oplus_chglib_creat_ic_err(struct device *dev, int type);
 void oplus_chglib_creat_i2c_err(struct device *dev);
 int oplus_chglib_get_cc_detect(struct device *dev);
-
-
+int oplus_chglib_upload_fcl_info(struct device *dev, int batt_volt, int batt_curr, int batt_temp);
+bool oplus_chglib_check_dchg(struct device *dev, int adapter_type);
+int oplus_chglib_fcl_vbatt(struct device *dev);
 #endif /*__OPLUS_CHGLIB_H__*/

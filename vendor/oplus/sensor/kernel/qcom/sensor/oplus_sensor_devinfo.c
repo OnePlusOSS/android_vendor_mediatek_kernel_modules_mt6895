@@ -16,6 +16,8 @@
 #define MAX_CMDLINE_PARAM_LEN 512
 char sns_dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 char sns_dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
+#define WUKONG_SEC_PANEL_NAME "mdss_dsi_panel_AA545_P_3_A0005_dsc_cmd"
+#define WUKONG_SEC_PANEL_NAME_INT_VALUE_FLAG 0xFF
 
 EXPORT_SYMBOL(sns_dsi_display_primary);
 EXPORT_SYMBOL(sns_dsi_display_secondary);
@@ -444,7 +446,10 @@ static int parse_cct_sensor_dts(struct sensor_hw *hw, struct device_node *ch_nod
 		"timer-size",
 		"fac-cali-sensor",
 		"first-source",
-		"second-source"
+		"second-source",
+		"first-panel-always_lb",
+		"second-panel-always_lb"
+		"panel-name-int-value-flag"
 	};
 
 	char *para[] = {
@@ -477,11 +482,17 @@ static int parse_cct_sensor_dts(struct sensor_hw *hw, struct device_node *ch_nod
 				SENSOR_DEVINFO_DEBUG("[SNS] %d panel source: %s\n", di, dsi_info->als_supt_cmdline[als_supt_cmdline_di]);
 			}
 			als_supt_cmdline_di++;
-			SENSOR_DEVINFO_DEBUG("[SNS] cct panel_idx: %d\n", hw->feature.feature[5]);
+			SENSOR_DEVINFO_DEBUG("cct_feature[%d] : %d\n", hw->feature.feature[5]);
 		} else {
 			rc = of_property_read_u32(ch_node, feature[di], &value);
 			if (!rc) {
 				hw->feature.feature[di] = value;
+			}
+
+			if (strstr(feature[di], "panel-name-int-value-flag")) {
+				if (strstr(sns_dsi_display_primary, WUKONG_SEC_PANEL_NAME)) {
+					hw->feature.feature[di] = WUKONG_SEC_PANEL_NAME_INT_VALUE_FLAG;
+				}
 			}
 			SENSOR_DEVINFO_DEBUG("cct_feature[%d] : %d\n", di, hw->feature.feature[di]);
 		}

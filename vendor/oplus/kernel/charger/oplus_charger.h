@@ -1134,11 +1134,36 @@ struct oplus_cpa_protocol_info {
 	int max_power_mw;
 };
 
+#define DEC_VOL_CC_THR_COUNT 6
+struct dec_cv_full_data {
+	bool del_status;
+	bool dec_init;
+	bool vct_en;
+	bool aging_soh;
+	int spec_step;
+	int pack_type;
+	int vct_cur;
+	int vct_up;
+	int soh_fact;
+	int dec_soh;
+	int dbg_soh;
+	int spec_cc_thr[DEC_VOL_CC_THR_COUNT];
+	int spec_fv_mv[DEC_VOL_CC_THR_COUNT];
+	int spec_vct_mv[DEC_VOL_CC_THR_COUNT];
+};
+
+struct dec_cv_lite_data {
+	int spec_dec_cv_mv;
+};
+
 struct dec_cv_data {
 	bool dec_track;
+	int dec_spec_support;
 	int dec_vol;
 	int dec_delta;
 	int spec_dec_cv_mv;
+	struct dec_cv_lite_data lite;
+	struct dec_cv_full_data full;
 };
 
 #define FCL_TABLE_MAX 2

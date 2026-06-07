@@ -144,7 +144,11 @@ static int tfa98xx_factory_flag = 0;
 //Modify for multi-project baseline
 //static char fw_name[100] = {0};
 //==>/vendor/firmware/../../odm/firmware/tfa98xx.cnt
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 180))
 static char *fw_name = "../../odm/firmware/tfa98xx.cnt";
+#else
+static char *fw_name = "tfa98xx.cnt";
+#endif
 module_param(fw_name, charp, 0644);
 MODULE_PARM_DESC(fw_name, "TFA98xx DSP firmware (container file) name.");
 #else

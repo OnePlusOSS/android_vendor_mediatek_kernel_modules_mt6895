@@ -63,6 +63,29 @@ static void transfer_lcdinfo_to_scp(struct work_struct *work)
 	}
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+static void ssc_interactive_sf_info_to_scp(void)
+{
+	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
+	if (ssc_cxt && ssc_cxt->sf_info.senstype != 0) {
+		schedule_delayed_work(&ssc_cxt->sf_info_work, 0);
+	}
+}
+
+static void transfer_sf_info_to_scp(struct work_struct *work)
+{
+	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
+	int ret = 0;
+
+	if (ssc_cxt->si && ssc_cxt->si->send_sf_info) {
+		ret = ssc_cxt->si->send_sf_info(&ssc_cxt->sf_info);
+	}
+	if (ret < 0) {
+		DEVINFO_LOG("send sf info error\n");
+	}
+}
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
+
 static ssize_t ssc_interactive_write(struct file *file, const char __user * buf,
                 size_t count, loff_t * ppos)
 {
@@ -166,6 +189,50 @@ static const struct file_operations under_mdevice_fops = {
 	.llseek  = generic_file_llseek,
 	.release = ssc_interactive_release,
 };
+
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+static ssize_t sf_device_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	DEVINFO_LOG("%s\n", __func__);
+	return 0;
+}
+
+static ssize_t sf_device_write(struct file *file, const char __user * buf,
+                size_t count, loff_t * ppos)
+{
+	struct screen_sf_info sf_info = {0};
+	char tmp[256] = {0};
+	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
+
+
+	if (count >= sizeof(tmp)) {
+		DEVINFO_LOG("sf_device_write: Input error count: %lu\n", count);
+		return -EINVAL;
+	}
+	if (copy_from_user(tmp, buf, count)) {
+		DEVINFO_LOG("sf_device_write: Failed to copy data from user\n");
+		return -EFAULT;
+	}
+
+	DEVINFO_LOG("sf_device_write: %s\n", tmp);
+
+	sscanf(tmp, "%lld,%lld,%d", &sf_info.start_ts, &sf_info.end_ts, &sf_info.index);
+
+	ssc_cxt->sf_info.start_ts = sf_info.start_ts;
+	ssc_cxt->sf_info.end_ts = sf_info.end_ts;
+	ssc_cxt->sf_info.index = sf_info.index;
+	ssc_interactive_sf_info_to_scp();
+
+	return count;
+}
+
+static struct file_operations sf_device_fops = {
+	.owner   = THIS_MODULE,
+	.read    = sf_device_read,
+	.write   = sf_device_write,
+	.llseek  = generic_file_llseek,
+};
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
 
 #if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_BLANK_MODE)
 static int mtk_lcdinfo_callback(struct notifier_block *nb, unsigned long event,
@@ -313,6 +380,9 @@ static int ssc_interactive_parse_dts(void)
 #if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_BLANK_MODE)
 	int report_blank_mode = 0;
 #endif
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+        int receive_screenshot_info = 0;
+#endif
 	struct device_node *node = NULL;
 	struct device_node *ch_node = NULL;
 	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
@@ -376,6 +446,18 @@ static int ssc_interactive_parse_dts(void)
 	}
 #endif
 
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+	ret = of_property_read_u32(node, "receive_screenshot_info", &receive_screenshot_info);
+	if (ret != 0) {
+		DEVINFO_LOG("read receive_screenshot_info fail\n");
+	}
+
+	if (receive_screenshot_info == 1) {
+		ssc_cxt->receive_screenshot_info = true;
+		DEVINFO_LOG("report screen shot mode\n");
+	}
+#endif
+
 	for_each_child_of_node(node, ch_node) {
 		parse_br_level_info_dts(ch_node);
 	}
@@ -403,6 +485,9 @@ static void scp_ready_work(struct work_struct *dwork)
 		&& ssc_cxt->si->get_lcdinfo_brocast_type) {
 		ssc_cxt->si->init_sensorlist();
 		ssc_cxt->a_info.senstype = ssc_cxt->si->get_lcdinfo_brocast_type();
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+		ssc_cxt->sf_info.senstype = ssc_cxt->si->get_lcdinfo_brocast_type();
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
 		DEVINFO_LOG("scp_ready_work success %d\n", ssc_cxt->a_info.senstype);
 	} else {
 		DEVINFO_LOG("do not get sensor type\n");
@@ -455,11 +540,28 @@ int ssc_interactive_init(void)
 		goto register_mdevice_failed;
 	}
 
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+	memset(&ssc_cxt->sf_dev, 0 , sizeof(struct miscdevice));
+	ssc_cxt->sf_dev.minor = MISC_DYNAMIC_MINOR;
+	ssc_cxt->sf_dev.name = "ssc_screenshot_info";
+	ssc_cxt->sf_dev.fops = &sf_device_fops;
+	if (ssc_cxt->receive_screenshot_info) {
+		if (misc_register(&ssc_cxt->sf_dev) != 0) {
+			DEVINFO_LOG("misc_register  sf_dev failed\n");
+			err = -ENODEV;
+			goto register_sf_device_failed;
+		}
+	}
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
+
 	INIT_DELAYED_WORK(&ssc_cxt->ready_work, scp_ready_work);
 	ssc_cxt->ready_nb.notifier_call = scp_ready;
 	scp_A_register_notify(&ssc_cxt->ready_nb);
 
 	INIT_DELAYED_WORK(&ssc_cxt->lcdinfo_work, transfer_lcdinfo_to_scp);
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+	INIT_DELAYED_WORK(&ssc_cxt->sf_info_work, transfer_sf_info_to_scp);
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
 	ssc_cxt->lcd_nb.notifier_call = lcdinfo_callback;
 	register_lcdinfo_notifier(&ssc_cxt->lcd_nb);
 #if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_BLANK_MODE)
@@ -480,6 +582,12 @@ register_mtk_disp_notifier_failed:
 	unregister_lcdinfo_notifier(&ssc_cxt->lcd_nb);
 	mtk_disp_notifier_unregister(&ssc_cxt->mtk_lcd_nb);
 #endif
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+register_sf_device_failed:
+	if (ssc_cxt->receive_screenshot_info) {
+		misc_deregister(&ssc_cxt->sf_dev);
+	}
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
 register_mdevice_failed:
 	kfifo_free(&ssc_cxt->fifo);
 parse_dts_failed:

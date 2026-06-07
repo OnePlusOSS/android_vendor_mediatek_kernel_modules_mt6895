@@ -4477,6 +4477,19 @@ static int oplus_subboard_temp_iio_init(struct battery_chg_dev *bcdev)
 		chg_err("can't find chg_mos_temp_chan node\n");
 	}
 
+	rc = of_property_match_string(bcdev->dev->of_node, "io-channel-names", "pmic_vbat_adc");
+	if (rc >= 0) {
+		bcdev->iio.pmic_vbat_adc = iio_channel_get(bcdev->dev, "pmic_vbat_adc");
+		if (IS_ERR(bcdev->iio.pmic_vbat_adc)) {
+			rc = PTR_ERR(bcdev->iio.pmic_vbat_adc);
+			if (rc != -EPROBE_DEFER)
+				chg_err("pmic_vbat_adc channel get error, %d\n", rc);
+			bcdev->iio.pmic_vbat_adc = NULL;
+			return rc;
+		}
+	} else {
+		chg_err("can't find pmic_vbat_adc channel node\n");
+	}
 	return rc;
 }
 
@@ -7789,6 +7802,30 @@ static int oplus_chg_get_usb_btb_temp_cal(struct battery_chg_dev *bcdev)
 	return temp / 1000;
 }
 
+static int oplus_chg_get_pmic_vbat_vol(struct battery_chg_dev *bcdev, int *vol_mv)
+{
+	int rc = 0;
+
+	if (!bcdev) {
+		chg_err("bcdev not ready\n");
+		return -ENODEV;
+	}
+
+	if (!IS_ERR_OR_NULL(bcdev->iio.pmic_vbat_adc)) {
+		rc = iio_read_channel_processed(bcdev->iio.pmic_vbat_adc, vol_mv);
+		if (rc < 0) {
+			chg_err("iio_read_channel_processed get  pmic_vbat_adc error\n");
+		} else {
+			*vol_mv = *vol_mv / 1000;
+		}
+	} else {
+		rc = -EOPNOTSUPP;
+		chg_err("pmic_vbat_adc is NULL !\n");
+	}
+
+	return rc;
+}
+
 static int oplus_chg_get_chg_mos_temp_cal(struct battery_chg_dev *bcdev)
 {
 	int rc;
@@ -8562,6 +8599,21 @@ static int oplus_sm8350_get_batt_hmac(struct oplus_chg_ic_dev *ic_dev,
 	return 0;
 }
 
+static int oplus_sm8350_get_vbatt_fcl(struct oplus_chg_ic_dev *ic_dev, int *vol_mv)
+{
+	struct battery_chg_dev *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+	oplus_chg_get_pmic_vbat_vol(chip, vol_mv);
+
+	return 0;
+}
+
 static int oplus_sm8350_set_batt_full(struct oplus_chg_ic_dev *ic_dev,
 				       bool full)
 {
@@ -8921,6 +8973,48 @@ static int oplus_sm8350_set_calib_time(struct oplus_chg_ic_dev *ic_dev,
 	oplus_ap_write_buffer(bcdev, AP_MESSAGE_WRITE_CALIB_TIME, (char *)&info, sizeof(struct gauge_calib_info));
 	bcdev->calib_info_init = true;
 	return 0;
+}
+
+static int oplus_sm8350_get_gauge_r_info(struct oplus_chg_ic_dev *ic_dev, u8 *info, int len)
+{
+	struct battery_chg_dev *bcdev;
+	int index = 0;
+	int rc = 0;
+
+	if (ic_dev == NULL || !info) {
+		chg_err("oplus_chg_ic_dev or info is NULL");
+		return -ENODEV;
+	}
+	bcdev = oplus_chg_ic_get_drvdata(ic_dev);
+
+	if (!bcdev || !bcdev->ap_read_buffer_dump)
+		return -ENODEV;
+
+	mutex_lock(&bcdev->ap_read_buffer_lock);
+	rc = ap_set_message_id(bcdev, AP_MESSAGE_GET_GAUGE_R_INFO);
+	if (rc)
+		goto err;
+
+	reinit_completion(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_R_INFO]);
+	rc = wait_for_completion_timeout(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_R_INFO],
+					 msecs_to_jiffies(BC_WAIT_TIME_MS));
+	if (!rc) {
+		chg_err("Error, timed out sending message\n");
+		goto err;
+	}
+
+	index = bcdev->ap_read_buffer_dump->data_size;
+	if (index >= len)
+		goto err;
+
+	memcpy(info, bcdev->ap_read_buffer_dump->data_buffer, index);
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return index;
+err:
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return -EINVAL;
 }
 
 static void oplus_get_manu_battinfo_work(struct work_struct *work)
@@ -9602,6 +9696,14 @@ static void *oplus_chg_8350_gauge_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_GAUGE_SET_LAST_CC:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT,
 						  oplus_fg_set_last_cc);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_GAUGE_R_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_GAUGE_R_INFO,
+					       oplus_sm8350_get_gauge_r_info);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_FCL_VOLT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_FCL_VOLT,
+					       oplus_sm8350_get_vbatt_fcl);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);

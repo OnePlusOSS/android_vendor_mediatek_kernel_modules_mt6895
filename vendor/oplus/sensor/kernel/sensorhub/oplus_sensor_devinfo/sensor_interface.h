@@ -39,6 +39,15 @@ struct als_info{
 #endif
 } __packed __aligned(4);
 
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+struct screen_sf_info {
+	uint16_t senstype;
+	int64_t start_ts;
+	int64_t end_ts;
+	int index;
+} __packed __aligned(4);
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
+
 struct cali_data {
 	int acc_data[6];
 	int gyro_data[6];
@@ -74,6 +83,9 @@ struct sensorhub_interface {
 	int (*send_cfg)(struct cali_data* cali_data);
 	int (*send_utc_time)(void);
 	int (*send_lcdinfo)(struct als_info *lcd_info);
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+	int (*send_sf_info)(struct screen_sf_info *sf_info);
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
 	int (*get_lcdinfo_brocast_type) (void);
 	void (*init_sensorlist)(void);
 	bool (*is_sensor_available)(char *name);
@@ -129,6 +141,11 @@ struct ssc_interactive{
 #endif
 	struct notifier_block ready_nb;
 	struct delayed_work lcdinfo_work;
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+	struct miscdevice sf_dev;
+	struct screen_sf_info sf_info;
+	struct delayed_work sf_info_work;
+#endif /* CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO */
 	struct delayed_work ready_work;
 	struct sensorhub_interface *si;
 	struct br_level_info brl_info;
@@ -138,6 +155,9 @@ struct ssc_interactive{
 	bool need_to_sync_lcd_rate;
 #if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_BLANK_MODE)
 	bool report_blank_mode;
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_SENSOR_USE_SCREENSHOT_INFO)
+        bool receive_screenshot_info;
 #endif
 };
 

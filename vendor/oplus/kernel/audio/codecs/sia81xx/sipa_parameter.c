@@ -26,7 +26,11 @@
 //#define LOAD_FW_BY_DELAY_WORK
 #define LOAD_TIME_OUT 	(2000)
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 180)) && (LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0))
+static const char *sipa_fw_name = "sipa.bin";
+#else
 static const char *sipa_fw_name = "../../odm/firmware/sipa.bin";
+#endif
 static SIPA_PARAM *sipa_parameters = NULL;
 static uint32_t sipa_fw_loaded = 0;
 static struct mutex sipa_fw_load_lock;
